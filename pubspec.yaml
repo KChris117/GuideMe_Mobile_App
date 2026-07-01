@@ -1,0 +1,100 @@
+name: guideme
+description: "A new flutter and firebase-based project with the title of
+  mobile-based guideme application development."
+
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
+
+version: 2.0.0
+
+environment:
+  sdk: ^3.5.1
+
+dependencies:
+  shared_preferences: ^2.3.4
+  url_launcher: ^6.3.1
+  cloud_firestore: ^5.6.0
+  cloud_functions: ^5.2.0
+  cupertino_icons: ^1.0.8
+  firebase_auth: ^5.3.4
+  firebase_core: ^3.8.1
+  # firebase_storage: ^12.3.7
+  flutter:
+    sdk: flutter
+  # flutter_dotenv: ^5.2.1
+  # flutter_launcher_icons: ^0.14.1
+  flutter_map: ^7.0.2
+  # fluttertoast: ^8.2.8
+  http: ^1.2.2
+  image_picker: ^1.1.2
+  intl: ^0.20.1
+  # latlong2: ^0.9.1
+  midtrans_sdk: ^0.4.0
+  path_provider: ^2.1.5
+  # permission_handler: ^11.3.1
+  phosphoricons_flutter: ^1.0.0
+  provider: ^6.1.2
+  # webview_flutter: ^4.10.0
+  carousel_slider: ^5.0.0
+  supabase_flutter: ^2.8.1
+  rxdart: ^0.28.0
+  double_back_to_exit: ^1.1.0
+  geolocator: ^13.0.2
+  # google_maps_flutter: ^2.10.0
+  flutter_polyline_points: ^2.1.0
+  # polyline: ^1.0.2
+  another_flushbar: ^1.12.30
+  package_info_plus: ^8.1.2
+  timeago: ^3.2.2
+
+  flutter_datetime_picker_plus: ^2.2.0
+  # flutter_cupertino_date_picker: ^1.0.26
+  # flutter_datetime_picker:  ^1.5.1
+
+  # firebase_messaging: ^15.1.5
+  # flutter_local_notifications: ^12.0.4
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.14.2
+
+flutter_icons:
+  android: true
+  ios: false
+  image_path: "assets/icons/guideme.png"
+  min_sdk_android: 23
+  #   android: "launcher_icon"
+  #   ios: true
+  #   image_path: "assets/icon/launcher_icon.png"
+  #   min_sdk_android: 21 # android min sdk min:16, default 21
+  #   macos:
+  #     generate: true
+  #     image_path: "assets/icon/launcher_icon.png"
+  #   android: "ic_launcher"
+  #   ios: true
+  #   image_path: "assets/icons/launcher_icon.png"
+  #   min_sdk_android: 21
+
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  # Menambahkan assets gambar
+  assets:
+    - assets/images/
+    - assets/icons/
+    # - .env
+
+  # Menambahkan fonts Inter
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600 # SemiBold
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700 # Bold
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800 # ExtraBold
+
