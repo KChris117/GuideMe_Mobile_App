@@ -4,7 +4,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.0' // Perbarui ini
+        classpath 'com.android.tools.build:gradle:8.11.1' // Perbarui ini
         classpath 'com.google.gms:google-services:4.3.10' // Tambahkan ini
         // Tambahkan classpath lainnya di sini
     }

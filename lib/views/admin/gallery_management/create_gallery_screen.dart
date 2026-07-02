@@ -236,7 +236,7 @@ class _CreateGalleryManagementScreenState extends State<CreateGalleryManagementS
 
     try {
       // Mengunggah gambar ke Supabase
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!);
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
       if (uploadPath.isNotEmpty) {
         // Mendapatkan URL publik untuk gambar yang diunggah

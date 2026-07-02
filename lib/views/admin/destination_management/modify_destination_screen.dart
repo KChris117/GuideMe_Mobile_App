@@ -140,7 +140,7 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
     final path = 'uploads/$sanitizedFileName';
 
     try {
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!);
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
       if (uploadPath.isNotEmpty) {
         final publicUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
@@ -289,7 +289,7 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                               ),
                               children: [
                                 TileLayer(
-                                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", // Updated URL without subdomains
+                                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgentPackageName: 'com.example.guideme', // Updated URL without subdomains
                                 ),
                                 if (selectedLocation != null)
                                   MarkerLayer(

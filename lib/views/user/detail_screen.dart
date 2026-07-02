@@ -489,7 +489,7 @@ class _DetailScreenState extends State<DetailScreen> {
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", // Updated URL without subdomains
+                                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgentPackageName: 'com.example.guideme', // Updated URL without subdomains
                               ),
                               if (_routePoints.isNotEmpty)
                                 PolylineLayer(

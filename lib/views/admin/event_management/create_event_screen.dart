@@ -84,7 +84,7 @@ class _createEventScreenState extends State<CreateEventScreen> {
 
     try {
       // Mengunggah gambar ke Supabase
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!);
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
       if (uploadPath.isNotEmpty) {
         // Mendapatkan URL publik untuk gambar yang diunggah
@@ -233,7 +233,7 @@ class _createEventScreenState extends State<CreateEventScreen> {
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", // Updated URL without subdomains
+                                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgentPackageName: 'com.example.guideme', // Updated URL without subdomains
                               ),
                               if (_selectedLocation != null)
                                 MarkerLayer(
@@ -746,7 +746,7 @@ class _createEventScreenState extends State<CreateEventScreen> {
 //                           ),
 //                           children: [
 //                             TileLayer(
-//                               urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", // Updated URL without subdomains
+//                               urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgentPackageName: 'com.example.guideme', // Updated URL without subdomains
 //                             ),
 //                             if (_selectedLocation != null)
 //                               MarkerLayer(

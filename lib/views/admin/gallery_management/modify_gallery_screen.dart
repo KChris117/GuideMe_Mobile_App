@@ -91,7 +91,7 @@ class _ModifyGalleryManagementScreenState extends State<ModifyGalleryManagementS
     final path = 'uploads/$sanitizedFileName';
 
     try {
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!);
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
       if (uploadPath.isNotEmpty) {
         final publicUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
@@ -498,7 +498,7 @@ class _ModifyGalleryManagementScreenState extends State<ModifyGalleryManagementS
 //   final fileName = DateTime.now().millisecondsSinceEpoch.toString();
 //   final path = 'uploads/$fileName';
 
-//   final response = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!);
+//   final response = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
 //   if (response.error == null) {
 //     final imageUrlResponse = await Supabase.instance.client.storage.from('images').getPublicUrl(path);
