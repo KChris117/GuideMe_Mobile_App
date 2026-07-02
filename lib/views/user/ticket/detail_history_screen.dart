@@ -15,6 +15,9 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:guideme/core/services/midtrans_service.dart';
+import 'package:guideme/controllers/purchase_controller.dart';
 
 class DetailHistoryScreen extends StatefulWidget {
   final dynamic data;
@@ -62,12 +65,14 @@ class _DetailHistoryScreenState extends State<DetailHistoryScreen> {
   // String? _selectedOption = null; // Opsi default
   String customerName = '';
   String customerEmail = '';
-  // late TextEditingController nameController;
-  // late TextEditingController emailController;
+  
+  late String currentPaymentStatus;
 
   @override
   void initState() {
     super.initState();
+    
+    currentPaymentStatus = widget.data.paymentStatus ?? 'completed';
 
     name = widget.data.ticketName;
     organizer = widget.data.organizer;
@@ -117,6 +122,24 @@ class _DetailHistoryScreenState extends State<DetailHistoryScreen> {
     //     customerEmail = emailController.text; // Perbarui nilai nameValue
     //   });
     // });
+    
+    _checkAndUpdateStatus();
+  }
+
+  Future<void> _checkAndUpdateStatus() async {
+    if (currentPaymentStatus == 'pending' && widget.data.orderId != null && widget.data.historyId != null) {
+      final _midtransService = MidtransService();
+      final _purchaseController = PurchaseController();
+      String newStatus = await _midtransService.checkTransactionStatus(widget.data.orderId!);
+      if (newStatus != 'pending') {
+        await _purchaseController.updatePaymentStatus(widget.data.historyId!, newStatus);
+        if (mounted) {
+          setState(() {
+            currentPaymentStatus = newStatus;
+          });
+        }
+      }
+    }
   }
 
   // Fungsi untuk menghitung total harga
@@ -591,50 +614,37 @@ class _DetailHistoryScreenState extends State<DetailHistoryScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(
-                        height: 16,
-                      ),
-                      MainCard(
-                        child: // Button Purchase
-                            LargeButton(
-                          label: 'Purchase',
-                          onPressed: () {
-                            // Validasi Form
-                            if (_formKey.currentState?.validate() == true) {
-                              if (_selectedCreditCard == null) {
-                                // Validasi tambahan untuk Radio Button
-                                // print(uid);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Please select a payment method')),
-                                );
+                      if (currentPaymentStatus == 'pending' && widget.data.paymentUrl != null)
+                        SizedBox(height: 16),
+                      if (currentPaymentStatus == 'pending' && widget.data.paymentUrl != null)
+                        MainCard(
+                          child: LargeButton(
+                            label: 'Lanjutkan Pembayaran',
+                            onPressed: () async {
+                              final Uri url = Uri.parse(widget.data.paymentUrl!);
+                              if (await canLaunchUrl(url)) {
+                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                                
+                                // Setelah ditutup, perbarui status ke Midtrans (hanya jika orderId ada)
+                                if (widget.data.orderId != null && widget.data.historyId != null) {
+                                  final _midtransService = MidtransService();
+                                  final _purchaseController = PurchaseController();
+                                  String newStatus = await _midtransService.checkTransactionStatus(widget.data.orderId!);
+                                  await _purchaseController.updatePaymentStatus(widget.data.historyId!, newStatus);
+                                  
+                                  if (newStatus == 'settlement' || newStatus == 'capture') {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment Successful!')));
+                                    Navigator.pop(context);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment is $newStatus')));
+                                  }
+                                }
                               } else {
-                                // Jika semua input valid, tampilkan dialog
-                                showDialog(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return AlertDialog(
-                                      backgroundColor: AppColors.backgroundColor,
-                                      contentPadding: EdgeInsets.all(8), // Hapus padding default
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8.0), // Mengatur border radius
-                                      ),
-                                      content: Container(
-                                        width: MediaQuery.of(context).size.width * 0.9, // 80% dari lebar layar
-                                        // child: PaymentFormModal(totalPrice: totalPrice, savePurchase: saveHistory),
-                                      ),
-                                    );
-                                  },
-                                );
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open payment page.')));
                               }
-                            } else {
-                              // Jika form tidak valid
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Please fill in all required fields')),
-                              );
-                            }
-                          },
+                            },
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

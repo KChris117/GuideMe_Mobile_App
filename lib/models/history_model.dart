@@ -1,6 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HistoryModel {
+  String? historyId;
+  String? orderId;
+  String? paymentUrl;
+  String? paymentStatus;
   String ticketId;
   String uid;
   String customerName;
@@ -23,6 +27,10 @@ class HistoryModel {
   Timestamp? updatedAt;
 
   HistoryModel({
+    this.historyId,
+    this.orderId,
+    this.paymentUrl,
+    this.paymentStatus,
     required this.ticketId,
     required this.uid,
     required this.customerName,
@@ -48,6 +56,10 @@ class HistoryModel {
   // Membuat instance Event dari Map (data Firestore)
   factory HistoryModel.fromMap(Map<String, dynamic> map, String eventId) {
     return HistoryModel(
+      historyId: eventId,
+      orderId: map['orderId'],
+      paymentUrl: map['paymentUrl'],
+      paymentStatus: map['paymentStatus'],
       ticketId: map['ticketId'],
       uid: map['uid'],
       customerName: map['customerName'],
@@ -58,10 +70,10 @@ class HistoryModel {
       organizer: map['organizer'],
       category: map['category'],
       subcategory: map['subcategory'],
-      rating: map['rating'],
-      price: map['price'],
-      totalPrice: map['totalPrice'],
-      quantity: map['quantity'],
+      rating: (map['rating'] ?? 0.0).toDouble(),
+      price: map['price']?.toInt() ?? 0,
+      totalPrice: (map['totalPrice'] ?? 0).toDouble(),
+      quantity: map['quantity']?.toInt() ?? 0,
       openingDate: map['openingDate'],
       openingTime: map['openingTime'],
       closingDate: map['closingDate'],
@@ -74,6 +86,9 @@ class HistoryModel {
   // Mengonversi instance Event ke Map untuk disimpan di Firestore
   Map<String, dynamic> toMap() {
     return {
+      'orderId': orderId,
+      'paymentUrl': paymentUrl,
+      'paymentStatus': paymentStatus,
       'ticketId': ticketId,
       'uid': uid,
       'customerName': customerName,
@@ -95,7 +110,7 @@ class HistoryModel {
       'purchaseAt': purchaseAt,
       'updatedAt': updatedAt,
     };
-  } // Menambahkan copyWith method
+  } 
 
   HistoryModel copyWith({
     String? ticketId,

@@ -1,75 +1,83 @@
-// import 'package:midtrans_sdk/midtrans_sdk.dart';
-// import 'package:flutter_dotenv/flutter_dotenv.dart';
-// import 'package:flutter/material.dart';
-
-// class MidtransService {
-//   MidtransSDK? _midtrans;
-
-//   // Inisialisasi SDK Midtrans
-//   Future<void> initSDK(BuildContext context) async {
-//     _midtrans = await MidtransSDK.init(
-//       config: MidtransConfig(
-//         clientKey: dotenv.env['MIDTRANS_CLIENT_KEY'] ?? "", // Pastikan clientKey sudah ada di .env
-//         merchantBaseUrl: dotenv.env['MIDTRANS_MERCHANT_BASE_URL'] ?? "", // URL Merchant
-//         colorTheme: ColorTheme(
-//           colorPrimary: Theme.of(context).colorScheme.secondary,
-//           colorPrimaryDark: Theme.of(context).colorScheme.secondary,
-//           colorSecondary: Theme.of(context).colorScheme.secondary,
-//         ),
-//       ),
-//     );
-//     _midtrans?.setUIKitCustomSetting(
-//       skipCustomerDetailsPages: true,
-//     );
-//     _midtrans!.setTransactionFinishedCallback((result) {
-//       print(result.toJson()); // Callback setelah transaksi selesai
-//     });
-//   }
-
-//   // Fungsi untuk memulai pembayaran
-//   Future<void> startPayment(String token) async {
-//     await _midtrans?.startPaymentUiFlow(
-//       token: token,
-//     );
-//   }
-
-//   // Hapus callback transaksi selesai
-//   void dispose() {
-//     _midtrans?.removeTransactionFinishedCallback();
-//   }
-// }
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 class MidtransService {
-  // URL server atau endpoint untuk mendapatkan token
-  final String apiUrl = 'http://192.168.1.5:3000/api/get-snap-token';
+  final String clientKey = 'Mid-client-URvcqjstpihnT4rh';
+  final String serverKey = 'Mid-server-swBvviREWhtoH1jyB_g7Z-Pm';
 
-  // Fungsi untuk mengambil token dari backend
-  Future<void> getTokenFromBackend() async {
+  final String snapApiUrl = 'https://app.sandbox.midtrans.com/snap/v1/transactions';
+  final String statusApiUrl = 'https://api.sandbox.midtrans.com/v2';
+
+  // Fungsi untuk mendapatkan URL Snap
+  Future<String> getPaymentUrl(double amount, String orderId) async {
     try {
+      final String basicAuth = base64Encode(utf8.encode('$serverKey:'));
+
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse(snapApiUrl),
         headers: {
-          'Content-Type': 'application/json'
-        }, // Pastikan format header benar
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $basicAuth',
+        },
         body: jsonEncode({
-          'orderId': 'order123',
-          'amount': 100000,
+          'transaction_details': {
+            'order_id': orderId,
+            'gross_amount': amount.toInt(),
+          },
+          'enabled_payments': [
+            'qris',
+            'gopay',
+            'shopeepay',
+            'credit_card',
+            'bca_va',
+            'mandiri_clickpay',
+            'echannel', // echannel is Mandiri VA
+            'bni_va',
+            'bri_va',
+            'other_va'
+          ],
+          'credit_card': {
+            'secure': true
+          }
         }),
       );
 
-      if (response.statusCode == 200) {
-        String token = json.decode(response.body)['snapToken'];
-        print("Token: $token"); // Debug token yang diterima
+      if (response.statusCode == 201) {
+        final responseBody = jsonDecode(response.body);
+        return responseBody['redirect_url'];
       } else {
-        print("Server response: ${response.body}"); // Debug respons server
-        throw Exception("Failed to get token");
+        throw Exception("Midtrans Error: ${response.statusCode} - ${response.body}");
       }
     } catch (e) {
-      print("Error: $e");
+      print("Error memproses Midtrans: $e");
       throw e;
     }
   }
+
+  // Cek status transaksi via Midtrans Core API
+  Future<String> checkTransactionStatus(String orderId) async {
+    try {
+      final String basicAuth = base64Encode(utf8.encode('$serverKey:'));
+      final response = await http.get(
+        Uri.parse('$statusApiUrl/$orderId/status'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $basicAuth',
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return data['transaction_status'] ?? 'pending';
+      }
+      return 'pending'; // Jika gagal cek atau belum selesai
+    } catch (e) {
+      print("Gagal cek status transaksi: $e");
+      return 'pending';
+    }
+  }
 }
+

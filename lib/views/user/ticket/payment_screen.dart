@@ -6,6 +6,7 @@ import 'package:guideme/core/constants/colors.dart';
 import 'package:guideme/core/constants/icons.dart';
 import 'package:guideme/core/constants/text_styles.dart';
 import 'package:guideme/core/services/auth_provider.dart';
+import 'package:guideme/core/services/midtrans_service.dart';
 import 'package:guideme/core/utils/text_utils.dart';
 import 'package:guideme/models/history_model.dart';
 import 'package:guideme/views/user/ticket/history_screen.dart';
@@ -19,6 +20,7 @@ import 'dart:convert';
 
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PaymentScreen extends StatefulWidget {
   final dynamic data;
@@ -62,10 +64,61 @@ class _PaymentScreenState extends State<PaymentScreen> {
   double totalPrice = 0.0;
 
   // String? _selectedOption = 'credit_card'; // Opsi default
-  String? _selectedCreditCard = null; // Opsi default
   // String? _selectedOption = null; // Opsi default
   String customerName = '';
   String customerEmail = '';
+
+  bool isProcessing = false;
+  final MidtransService _midtransService = MidtransService();
+
+  void _processMidtransPayment() async {
+    setState(() {
+      isProcessing = true;
+    });
+    try {
+      String orderId = 'ORDER-${DateTime.now().millisecondsSinceEpoch}';
+      
+      // 1. Dapatkan URL Snap dari Midtrans Service
+      String redirectUrl = await _midtransService.getPaymentUrl(totalPrice, orderId);
+      
+      // 2. Simpan ke Firestore sebagai PENDING (belum dibayar)
+      String? historyId = await saveHistory(orderId, redirectUrl, 'pending');
+      
+      if (historyId != null) {
+        // 3. Buka WebView untuk pembayaran
+        final Uri url = Uri.parse(redirectUrl);
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+          
+          // 4. Setelah WebView ditutup, cek status ke Midtrans
+          String status = await _midtransService.checkTransactionStatus(orderId);
+          
+          // 5. Update status di Firestore
+          await _purchaseController.updatePaymentStatus(historyId, status);
+          
+          if (status == 'settlement' || status == 'capture') {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment Successful!')));
+            Navigator.pop(context); // Kembali atau sesuaikan alur aplikasi
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment is $status. Check history to resume.')));
+            Navigator.pop(context);
+          }
+        } else {
+          throw Exception("Could not launch payment URL.");
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to initialize payment data.')));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) {
+        setState(() {
+          isProcessing = false;
+        });
+      }
+    }
+  }
   // late TextEditingController nameController;
   // late TextEditingController emailController;
 
@@ -167,36 +220,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
         calculateTotalPrice();
       });
     } else {
-      // Jika input tidak valid, kembalikan ke nilai terakhir yang valid
       quantityController.text = quantity.toString();
     }
   }
 
-  Future<void> saveHistory() async {
+  Future<String?> saveHistory(String orderId, String paymentUrl, String paymentStatus) async {
     if (_formKey.currentState!.validate()) {
-      // Validasi form
       if (quantityController != 'not found' && nameController != 'not found' && emailController != 'not found') {
-        // var ticketData = await _purchaseController.getTicketData(selectedCategory!, selectedName!);
-        // Mengonversi formattedOpeningDate dan formattedOpeningTime ke DateTime
-        //
         DateTime openingDateTime = DateFormat('yyyy-MM-dd').parse(formattedOpeningDate);
         DateTime openingTime = DateFormat('hh:mm a').parse(formattedOpeningTime);
 
         DateTime closingDateTime = DateFormat('yyyy-MM-dd').parse(formattedClosingDate);
         DateTime closingTime = DateFormat('hh:mm a').parse(formattedClosingTime);
 
-        // Mengonversi DateTime menjadi Timestamp
         Timestamp openingTimestamp = Timestamp.fromDate(openingDateTime);
         Timestamp openingTimeTimestamp = Timestamp.fromDate(openingTime);
         Timestamp closingTimestamp = Timestamp.fromDate(closingDateTime);
         Timestamp closingTimeTimestamp = Timestamp.fromDate(closingTime);
 
-        print(openingTimeTimestamp);
-        print(openingTimestamp);
-        print(closingTimestamp);
-        print(closingTimeTimestamp);
         if (stock != 0) {
           HistoryModel dataPurchase = HistoryModel(
+            orderId: orderId,
+            paymentUrl: paymentUrl,
+            paymentStatus: paymentStatus,
             ticketId: ticketId,
             uid: uid,
             customerName: nameController.text,
@@ -219,27 +265,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
             updatedAt: Timestamp.now(),
           );
           try {
-            // Memanggil fungsi addHistory untuk menyimpan event dan galeri ke Firestore
-            await _purchaseController.addHistory(dataPurchase);
-
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('History created successfully.'),
-            ));
-            // SuccessFloatingSnackBar.show(context: context, message: 'Ticket created successfully.');
-            // Mengarahkan ke halaman HistoryScreen dan mengganti halaman saat ini
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => HistoryScreen()), // Arahkan ke halaman HistoryScreen
-            );
+            String historyId = await _purchaseController.addHistory(dataPurchase);
+            return historyId;
           } catch (e) {
-            // ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            //   content: Text(),
-            // ));
-            DangerFloatingSnackBar.show(context: context, message: 'Failed to create ticket: $e');
+            print('Error creating history: $e');
+            return null;
           }
         } else {
           DangerFloatingSnackBar.show(context: context, message: 'Ticket out of stock.');
-          return;
+          return null;
         }
       } else {
         // ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -253,6 +287,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       // ));
       DangerFloatingSnackBar.show(context: context, message: 'Please complete all fields correctly');
     }
+    return null;
   }
 
   @override
@@ -693,112 +728,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ),
                       MainCard(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'Payment methods',
-                                    style: AppTextStyles.bodyBold,
-                                  ),
-                                ],
-                              ),
-                              ExpansionTile(
-                                leading: Icon(
-                                  AppIcons.wallet, // Ganti dengan ikon yang sesuai
-                                  size: 18.0, // Ukuran ikon, sesuaikan sesuai kebutuhan
-                                ),
-                                title: Text(
-                                  'E-Wallet',
-                                  style: AppTextStyles.mediumBlack,
-                                ),
-                                iconColor: AppColors.primaryColor,
-                                collapsedIconColor: AppColors.secondaryColor,
-                                textColor: AppColors.primaryColor,
-                                collapsedTextColor: AppColors.secondaryColor,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                                childrenPadding: EdgeInsets.only(left: 40),
-                                children: [
-                                  Column(
-                                    children: [
-                                      Divider(thickness: 1, color: Colors.grey), // Divider below text
-                                      ListTile(
-                                        title: Text(
-                                          'GoPay',
-                                          style: AppTextStyles.mediumBlack,
-                                        ),
-                                        onTap: () {
-                                          // Logika atau tindakan untuk GoPay
-                                        },
-                                      ),
-                                      Divider(thickness: 1, color: Colors.grey), // Divider below text
-                                      ListTile(
-                                        title: Text(
-                                          'DANA',
-                                          style: AppTextStyles.mediumBlack,
-                                        ),
-                                        onTap: () {
-                                          // Logika atau tindakan untuk DANA
-                                        },
-                                      ),
-                                      Divider(thickness: 1, color: Colors.grey), // Divider below text
-                                      ListTile(
-                                        title: Text(
-                                          'ShopeePay',
-                                          style: AppTextStyles.mediumBlack,
-                                        ),
-                                        onTap: () {
-                                          // Logika atau tindakan untuk ShopeePay
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              Divider(thickness: 1, color: Colors.grey), // Divider below text
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 14.0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Agar posisi elemen di sebelah kanan dan kiri
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          AppIcons.creditCard,
-                                          size: 18.0,
-                                          color: _selectedCreditCard == 'credit_card'
-                                              ? AppColors.primaryColor // Warna jika radio dipilih
-                                              : AppColors.secondaryColor, // Warna jika radio tidak dipilih
-                                        ),
-                                        SizedBox(
-                                          width: 24,
-                                        ),
-                                        Text('Credit Card',
-                                            style: AppTextStyles.mediumBlack
-                                                .copyWith(color: _selectedCreditCard == 'credit_card' ? AppColors.primaryColor : AppColors.secondaryColor)),
-                                      ],
-                                    ), // Teks di kiri
-                                    Radio<String>(
-                                      value: 'credit_card', // Nilai untuk opsi ini
-                                      activeColor: AppColors.primaryColor,
-                                      groupValue: _selectedCreditCard, // Menyimpan pilihan yang dipilih
-                                      onChanged: (String? value) {
-                                        setState(() {
-                                          _selectedCreditCard = value;
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Divider(thickness: 1, color: Colors.grey), // Divider below text
-                            ],
-                          ),
-                        ),
-                      ),
-                      MainCard(
-                        child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Column(
                             children: [
@@ -948,40 +877,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       MainCard(
                         child: // Button Purchase
                             LargeButton(
-                          label: 'Purchase',
-                          onPressed: () {
-                            // Validasi Form
-                            if (stock != 0) {
-                              if (_formKey.currentState?.validate() == true) {
-                                if (_selectedCreditCard == null) {
-                                  DangerTopFloatingSnackBar.show(context: context, message: 'Please select a payment method.');
-                                } else {
-                                  // Jika semua input valid, tampilkan dialog
-                                  showDialog(
-                                    context: context,
-                                    builder: (BuildContext context) {
-                                      return AlertDialog(
-                                        backgroundColor: AppColors.backgroundColor,
-                                        contentPadding: EdgeInsets.all(8), // Hapus padding default
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8.0), // Mengatur border radius
-                                        ),
-                                        content: Container(
-                                          width: MediaQuery.of(context).size.width * 0.9, // 80% dari lebar layar
-                                          child: PaymentFormModal(totalPrice: totalPrice, savePurchase: saveHistory),
-                                        ),
-                                      );
-                                    },
-                                  );
-                                }
-                              } else {
-                                DangerTopFloatingSnackBar.show(context: context, message: 'Please fill in all required fields');
-                              }
-                            } else {
-                              DangerFloatingSnackBar.show(context: context, message: 'Ticket out of stock.');
-                              return;
-                            }
-                          },
+                          label: isProcessing ? 'Processing...' : 'Purchase',
+                          onPressed: isProcessing
+                              ? null
+                              : () {
+                                  // Validasi Form
+                                  if (stock != 0) {
+                                    if (_formKey.currentState?.validate() == true) {
+                                      _processMidtransPayment();
+                                    } else {
+                                      DangerTopFloatingSnackBar.show(context: context, message: 'Please fill in all required fields');
+                                    }
+                                  } else {
+                                    DangerFloatingSnackBar.show(context: context, message: 'Ticket out of stock.');
+                                    return;
+                                  }
+                                },
                         ),
                       ),
                     ],
@@ -995,299 +906,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
       bottomNavigationBar: UserBottomNavBar(selectedIndex: 1),
     );
   }
+
 }
 
-class PaymentFormModal extends StatefulWidget {
-  final double totalPrice; // Tambahkan parameter totalPrice
-  final Function savePurchase;
-
-  PaymentFormModal({required this.totalPrice, required this.savePurchase});
-  // get totalPrice => totalPrice;
-
-  @override
-  _PaymentFormModalState createState() => _PaymentFormModalState();
-}
-
-class _PaymentFormModalState extends State<PaymentFormModal> {
-  final TextEditingController _cardNumberController = TextEditingController();
-  final TextEditingController _expMonthController = TextEditingController();
-  final TextEditingController _expYearController = TextEditingController();
-  final TextEditingController _cvvController = TextEditingController();
-  final TextEditingController _grossAmountController = TextEditingController();
-
-  // Formatter untuk memasukkan dash setiap 4 angka
-  final TextInputFormatter _cardNumberFormatter = TextInputFormatter.withFunction(
-    (oldValue, newValue) {
-      String text = newValue.text;
-      // Menghilangkan karakter non-numeric
-      text = text.replaceAll(RegExp(r'[^0-9]'), '');
-
-      // Memformat dengan dash setelah setiap 4 digit
-      String formattedText = '';
-      for (int i = 0; i < text.length; i++) {
-        if (i > 0 && i % 4 == 0) {
-          formattedText += '-';
-        }
-        formattedText += text[i];
-      }
-
-      // Mengembalikan nilai baru dengan format
-      return newValue.copyWith(text: formattedText, selection: TextSelection.collapsed(offset: formattedText.length));
-    },
-  );
-
-  // URL backend
-  // final String url = 'http://192.168.1.7:3000/process-payment'; // IP wifi // Ganti dengan IP dan port backend Anda
-  // final String url = 'http://192.168.117.214:3000/process-payment'; // IP hospot wirtz
-  // final String url = 'http://192.168.98.214:3000/process-payment'; // IP hospot fixcelt
-  final String url = 'http://10.170.4.142:3000/process-payment'; // IP hospot fixcelt
-
-  late double totalPrice;
-  // Tambahkan state untuk memantau status loading
-  bool isProcessing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _grossAmountController.text = formatPrice(widget.totalPrice.toInt()); // Set nilai awal
-    totalPrice = widget.totalPrice;
-    // print(_grossAmountController.text);
-  }
-
-  // Fungsi untuk mengirimkan data ke backend
-  Future<void> processPayment() async {
-    FocusScope.of(context).unfocus();
-    // Navigator.of(context).pop();
-    final cardNumber = _cardNumberController.text;
-    final expMonth = _expMonthController.text;
-    final expYear = _expYearController.text;
-    final cvv = _cvvController.text;
-    final grossAmount = totalPrice;
-    // final grossAmount = 1000000;
-
-    if (cardNumber.isEmpty || expMonth.isEmpty || expYear.isEmpty || cvv.isEmpty || grossAmount == 0) {
-      // Validasi input kosong
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please fill in all fields')));
-      return;
-    }
-
-    setState(() {
-      isProcessing = true; // Menandakan bahwa proses sedang berlangsung
-    });
-
-    try {
-      // Membuat data yang akan dikirim
-      final Map<String, dynamic> data = {
-        'card_number': cardNumber,
-        'card_exp_month': expMonth,
-        'card_exp_year': expYear,
-        'card_cvv': cvv,
-        'gross_amount': grossAmount,
-      };
-
-      // Mengirimkan data ke backend dengan POST
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(data), // Mengirimkan data dalam format JSON
-      );
-      setState(() {
-        isProcessing = false; // Menghentikan indikator loading setelah selesai
-      });
-
-      if (response.statusCode == 200) {
-        // Jika berhasil
-        final responseBody = json.decode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment processed successfully')));
-        widget.savePurchase();
-
-        print('Payment processed successfully: $responseBody');
-      } else {
-        // Jika gagal
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to process payment')));
-        print('Failed to process payment: ${response.body}');
-      }
-    } catch (e) {
-      print('Error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Judul
-              Text(
-                'Enter Credit Card',
-                style: AppTextStyles.subtitleStyle,
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 20),
-
-              // Card Number
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _cardNumberController,
-                    cursorColor: AppColors.primaryColor,
-                    decoration: InputDecoration(
-                      labelText: 'Card Number',
-                      prefixIcon: Icon(AppIcons.creditCard),
-                      labelStyle: AppTextStyles.mediumBlack,
-                      isDense: true, // Ukuran kotak lebih kecil
-                      border: OutlineInputBorder(),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: AppColors.primaryColor, // Warna border
-                          width: 2.0, // Menambahkan ketebalan border
-                        ),
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      _cardNumberFormatter,
-                    ],
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your name';
-                      }
-                      return null; // Input valid
-                    },
-                  ),
-                  SizedBox(
-                    height: 4,
-                  ),
-                  Text(
-                    'Example: 5264-2210-3887-4659',
-                    style: AppTextStyles.smallStyle.copyWith(color: AppColors.secondaryColor),
-                  ),
-                ],
-              ),
-              SizedBox(height: 15),
-
-              // Expiry Date and CVV Row
-              Row(
-                children: [
-                  // Expiration Date
-                  Expanded(
-                    child: TextField(
-                      controller: _expMonthController,
-                      cursorColor: AppColors.primaryColor,
-                      decoration: InputDecoration(
-                        labelText: 'MM',
-                        hintText: 'Month',
-                        hintStyle: AppTextStyles.bodyBlack.copyWith(fontWeight: FontWeight.normal, color: AppColors.secondaryColor),
-                        labelStyle: AppTextStyles.mediumBlack,
-                        isDense: true, // Ukuran kotak lebih kecil
-                        border: OutlineInputBorder(),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: AppColors.primaryColor, // Warna border
-                            width: 2.0, // Menambahkan ketebalan border
-                          ),
-                        ),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _expYearController,
-                      cursorColor: AppColors.primaryColor,
-                      decoration: InputDecoration(
-                        labelText: 'YYYY',
-                        hintText: 'Year',
-                        hintStyle: AppTextStyles.bodyBlack.copyWith(fontWeight: FontWeight.normal, color: AppColors.secondaryColor),
-                        labelStyle: AppTextStyles.mediumBlack,
-                        isDense: true, // Ukuran kotak lebih kecil
-                        border: OutlineInputBorder(),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: AppColors.primaryColor, // Warna border
-                            width: 2.0, // Menambahkan ketebalan border
-                          ),
-                        ),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _cvvController,
-                      cursorColor: AppColors.primaryColor,
-                      decoration: InputDecoration(
-                        labelText: 'CVV',
-                        hintText: '123',
-                        hintStyle: AppTextStyles.bodyBlack.copyWith(fontWeight: FontWeight.normal, color: AppColors.secondaryColor),
-                        labelStyle: AppTextStyles.mediumBlack,
-                        isDense: true, // Ukuran kotak lebih kecil
-                        border: OutlineInputBorder(),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: AppColors.primaryColor, // Warna border
-                            width: 2.0, // Menambahkan ketebalan border
-                          ),
-                        ),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 15),
-
-              // Gross Amount (Read Only)
-              TextField(
-                controller: _grossAmountController,
-                decoration: InputDecoration(
-                  labelText: 'Gross Amount',
-                  labelStyle: AppTextStyles.mediumBlack,
-                  isDense: true, // Ukuran kotak lebih kecil
-                  border: OutlineInputBorder(),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: AppColors.primaryColor, // Warna border
-                      width: 2.0, // Menambahkan ketebalan border
-                    ),
-                  ),
-                ),
-                readOnly: true,
-              ),
-              SizedBox(height: 25),
-
-              // Process Payment Button
-              isProcessing
-                  ? LargeButton(
-                      label: '', // Kosongkan label jika sedang loading
-                      onPressed: () {}, // Tidak melakukan apapun karena sedang memproses
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.backgroundColor, // Sesuaikan warna dengan aplikasi Anda
-                        ),
-                      ),
-                    )
-                  : LargeButton(
-                      label: 'Purchase',
-                      onPressed: () {
-                        setState(() {
-                          isProcessing = true; // Mengubah status menjadi sedang proses
-                        });
-                        processPayment(); // Panggil fungsi processPayment saat tombol ditekan
-                      },
-                    ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

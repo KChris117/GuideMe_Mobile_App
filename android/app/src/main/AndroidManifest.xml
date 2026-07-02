@@ -15,6 +15,7 @@
         android:label="guideme"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
         tools:replace="android:label"
         android:enableOnBackInvokedCallback="true">
         <!-- ini ditambah -->

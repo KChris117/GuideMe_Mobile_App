@@ -202,15 +202,18 @@ class HistoryScreenContent extends StatelessWidget {
                                   ],
                                 ),
                                 Column(
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Completed',
-                                          style: AppTextStyles.mediumBold.copyWith(color: AppColors.greenColor),
-                                        ),
-                                      ],
-                                    ),
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            newHistoryModel.paymentStatus == 'pending' ? 'Pending Payment' : 'Completed',
+                                            style: AppTextStyles.mediumBold.copyWith(
+                                                color: newHistoryModel.paymentStatus == 'pending'
+                                                    ? AppColors.yellowColor
+                                                    : AppColors.greenColor),
+                                          ),
+                                        ],
+                                      ),
                                   ],
                                 ),
                               ],
@@ -311,22 +314,6 @@ class HistoryScreenContent extends StatelessWidget {
                                           style: AppTextStyles.mediumBold,
                                         ),
                                       ],
-                                    ),
-                                  ],
-                                ),
-                                Column(
-                                  children: [
-                                    SmallButton(
-                                      onPressed: () {
-                                        // Navigator.push(
-                                        //   context,
-                                        //   MaterialPageRoute(
-                                        //     builder: (context) => PaymentScreen(data: newHistoryModel),
-                                        //     // builder: (context) => DetailScreen(data: collectionName, id: doc.id),
-                                        //   ),
-                                        // );
-                                      },
-                                      label: 'Re-purchase',
                                     ),
                                   ],
                                 ),

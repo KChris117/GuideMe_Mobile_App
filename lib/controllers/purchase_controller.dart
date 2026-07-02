@@ -4,7 +4,7 @@ import 'package:guideme/models/history_model.dart';
 class PurchaseController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<void> addHistory(HistoryModel dataPurchase) async {
+  Future<String> addHistory(HistoryModel dataPurchase) async {
     // Tambahkan data ke koleksi 'histories'
     DocumentReference historyRef = await _firestore.collection('histories').add(dataPurchase.toMap());
 
@@ -15,7 +15,15 @@ class PurchaseController {
     // Update stock di koleksi 'tickets'
     await _firestore.collection('tickets').doc(ticketId).update({
       'stock': FieldValue.increment(-quantity), // Mengurangi stock dengan quantity
-      'status': 'unavailable',
+    });
+
+    return historyRef.id;
+  }
+
+  Future<void> updatePaymentStatus(String historyId, String status) async {
+    await _firestore.collection('histories').doc(historyId).update({
+      'paymentStatus': status,
+      'updatedAt': Timestamp.now(),
     });
   }
 }
