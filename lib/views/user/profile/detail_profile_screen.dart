@@ -1,11 +1,15 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:guideme/widgets/custom_appbar.dart';
 import 'package:guideme/widgets/custom_button.dart';
 import 'package:guideme/widgets/custom_navbar.dart';
 import 'package:guideme/widgets/custom_title.dart';
-import 'dart:io';
 import 'package:intl/intl.dart';
 
 class DetailProfileScreen extends StatefulWidget {
@@ -28,11 +32,23 @@ class _DetailProfileScreenState extends State<DetailProfileScreen> {
   final TextEditingController _postalCodeController = TextEditingController();
   final TextEditingController _birthDateController = TextEditingController();
   final TextEditingController _roleController = TextEditingController();
-  final TextEditingController _profileImageUrlController = TextEditingController();
 
   String? _profileImageUrl;
-  File? _profileImage;
-  String? _selectedCountry; // Make _selectedCountry a String
+  Uint8List? _imageBytes;
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _imageBytes = bytes;
+      });
+    }
+  }
+
+  String? _selectedCountry;
   final List<String> _countries = [
     'Afghanistan',
     'Albania',
@@ -228,24 +244,36 @@ class _DetailProfileScreenState extends State<DetailProfileScreen> {
     'Zambia',
     'Zimbabwe'
   ];
-  // Example country list
 
   @override
   void initState() {
     super.initState();
-    _loadData(); // Load data from Firestore when the widget is initialized
+    _loadData();
     _selectedCountry = 'Indonesia';
   }
 
   Future<void> _saveData() async {
     try {
-      print(user!.uid);
+      String finalProfilePicUrl = _profileImageUrl ?? '';
+      
+      if (_imageBytes != null) {
+        final userId = user!.uid;
+        final sanitizedFileName = 'profile_${userId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final path = 'profiles/$sanitizedFileName';
+        
+        await Supabase.instance.client.storage
+            .from('images')
+            .uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
+            
+        finalProfilePicUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
+      }
+
       await FirebaseFirestore.instance.collection('users').doc(user!.uid).set({
         'uid': user!.uid,
         'username': _usernameController.text,
         'first_name': _firstNameController.text,
         'last_name': _lastNameController.text,
-        'country': _selectedCountry, // Save the selected country
+        'country': _selectedCountry,
         'province': _stateController.text,
         'city': _cityController.text,
         'street': _streetController.text,
@@ -253,8 +281,8 @@ class _DetailProfileScreenState extends State<DetailProfileScreen> {
         'birth_date': _birthDateController.text,
         'role': _roleController.text,
         'email': user?.email,
-        'profilePicture': _profileImageUrlController.text,
-      });
+        'profilePicture': finalProfilePicUrl,
+      }, SetOptions(merge: true));
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Your data has been saved')),
@@ -284,7 +312,6 @@ class _DetailProfileScreenState extends State<DetailProfileScreen> {
           _postalCodeController.text = data['post_code'] ?? '';
           _birthDateController.text = data['birth_date'] ?? '';
           _roleController.text = data['role'] ?? '';
-          _profileImageUrlController.text = data['profilePicture'] ?? '';
           _profileImageUrl = data['profilePicture'];
         });
       } else {
@@ -312,29 +339,45 @@ class _DetailProfileScreenState extends State<DetailProfileScreen> {
             children: <Widget>[
               TitlePage(title: 'Your Details', subtitle: ' Enhance your information'),
               const SizedBox(height: 20),
-              _profileImage != null
-                  ? CircleAvatar(
-                      radius: 50,
-                      backgroundImage: FileImage(_profileImage!),
-                    )
-                  : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
-                      ? CircleAvatar(
-                          radius: 50,
-                          backgroundImage: NetworkImage(_profileImageUrl!),
-                        )
-                      : CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.grey,
-                          child: const Icon(Icons.person, size: 40),
+              GestureDetector(
+                onTap: _pickImage,
+                child: Stack(
+                  children: [
+                    _imageBytes != null
+                        ? CircleAvatar(
+                            radius: 50,
+                            backgroundImage: MemoryImage(_imageBytes!),
+                          )
+                        : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty)
+                            ? CircleAvatar(
+                                radius: 50,
+                                backgroundImage: NetworkImage(_profileImageUrl!),
+                              )
+                            : CircleAvatar(
+                                radius: 50,
+                                backgroundColor: Colors.grey,
+                                child: const Icon(Icons.person, size: 40),
+                              ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
                         ),
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: _profileImageUrlController,
-                decoration: const InputDecoration(
-                  labelText: 'Profile Picture URL',
+                        child: Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(height: 20),
               // Tampilkan email (readonly)
               TextFormField(
                 initialValue: user?.email ?? 'No email available',

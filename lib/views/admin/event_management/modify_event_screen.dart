@@ -1,3 +1,4 @@
+import 'package:guideme/models/gallery_model.dart';
 // import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:typed_data';
@@ -44,7 +45,7 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
   String? selectedStatus;
   String? imageUrl;
   File? _imageFile;
-  Uint8List? _imageBytes;
+  List<Uint8List> _imageBytesList = [];
   bool _isMapExpanded = true;
   double? latitude;
   double? longitude;
@@ -117,15 +118,17 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
   Future<void> _pickImage() async {
     try {
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      setState(() {
-        try { _imageFile = File(pickedFile.path); } catch(e) {}
-        _imageBytes = bytes;
+      final List<XFile> pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles.isNotEmpty) {
+        List<Uint8List> bytesList = [];
+        for (var file in pickedFiles) {
+          bytesList.add(await file.readAsBytes());
+        }
+        setState(() {
+          _imageBytesList.addAll(bytesList);
           imageUrl = null; // Reset URL jika file baru dipilih
         });
-    }
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to pick image: $e')),
@@ -133,14 +136,12 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
     }
   }
 
-  Future<String?> _uploadImage(String name, String category) async {
-    if (_imageBytes == null) return imageUrl;
-
-    final sanitizedFileName = '${name}_${category}_${DateTime.now().millisecondsSinceEpoch}'.replaceAll(' ', '_');
-    final path = 'uploads/$sanitizedFileName';
+  Future<String?> _uploadImage(String name, String category, Uint8List bytes, int index) async {
+    final sanitizedFileName = '${name}_${category}_${DateTime.now().millisecondsSinceEpoch}_$index'.replaceAll(' ', '_');
+    final path = 'uploads/$sanitizedFileName.jpg';
 
     try {
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, bytes, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
       if (uploadPath.isNotEmpty) {
         final publicUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
@@ -169,19 +170,22 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
     final name = nameNotifier.value;
     final category = selectedCategory ?? 'Uncategorized';
 
-    // Upload image jika ada file baru
-    final finalImageUrl = await _uploadImage(name, category);
-
-    if (finalImageUrl == null) return; // Hentikan proses jika upload gagal
+    String finalImageUrl = imageUrl ?? '';
+    if (_imageBytesList.isNotEmpty) {
+      String? newMainImage = await _uploadImage(name, category, _imageBytesList.first, 0);
+      if (newMainImage != null) {
+        finalImageUrl = newMainImage;
+      } else return;
+    }
 
     // Menggunakan copyWith untuk membuat objek baru
     EventModel updatedEvent = widget.eventModel.copyWith(
-      name: nameNotifier.value.toLowerCase(),
-      location: locationNotifier.value.toLowerCase(),
+      name: nameNotifier.value,
+      location: locationNotifier.value,
       latitude: selectedLocation!.latitude,
       longitude: selectedLocation!.longitude,
       imageUrl: finalImageUrl,
-      organizer: organizerNotifier.value.toLowerCase(),
+      organizer: organizerNotifier.value,
       category: selectedCategory!,
       subcategory: selectedSubcategory!,
       description: descriptionNotifier.value,
@@ -196,6 +200,25 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
 
     try {
       await _eventController.updateEvent(updatedEvent, finalImageUrl);
+      if (_imageBytesList.length > 1) {
+        for (int i = 1; i < _imageBytesList.length; i++) {
+          String? additionalUrl = await _uploadImage(name, category, _imageBytesList[i], i);
+          if (additionalUrl != null) {
+            final galleryId = FirebaseFirestore.instance.collection('galleries').doc().id;
+            final galleryModel = GalleryModel(
+              galleryId: galleryId,
+              name: name,
+              imageUrl: additionalUrl,
+              category: category,
+              subcategory: selectedSubcategory ?? '',
+              description: descriptionNotifier.value,
+              createdAt: Timestamp.now(),
+              mainImage: false,
+            );
+            await FirebaseFirestore.instance.collection('galleries').doc(galleryId).set(galleryModel.toMap());
+          }
+        }
+      }
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Event updated successfully'),
@@ -232,7 +255,7 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
                       onChanged: (value) {
                         nameNotifier.value = value;
                         _nameController.value = TextEditingValue(
-                          text: value.toLowerCase(),
+                          text: value,
                           selection: _nameController.selection,
                         );
                       },
@@ -252,7 +275,7 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
                       onChanged: (value) {
                         locationNotifier.value = value;
                         _locationController.value = TextEditingValue(
-                          text: value.toLowerCase(),
+                          text: value,
                           selection: _locationController.selection,
                         );
                       },
@@ -337,7 +360,7 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
                       onChanged: (value) {
                         organizerNotifier.value = value;
                         _organizerController.value = TextEditingValue(
-                          text: value.toLowerCase(),
+                          text: value,
                           selection: _organizerController.selection,
                         );
                       },
@@ -459,10 +482,9 @@ class _ModifyEventScreenState extends State<ModifyEventScreen> {
                 ),
                 SizedBox(height: 16),
 
-                NewUploadImageWithPreview(
-                  imageUrl: imageUrl, // Gantilah dengan URL gambar yang dipilih
-                  imageFile: _imageFile,
-                  imageBytes: _imageBytes,
+                MultiUploadImageWithPreview(
+                  imageBytesList: _imageBytesList,
+                  imageUrl: imageUrl,
                   onPressed: _pickImage, // Fungsi untuk memilih gambar
                 ),
 

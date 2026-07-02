@@ -1,3 +1,4 @@
+import 'package:guideme/models/gallery_model.dart';
 // import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:typed_data';
@@ -46,7 +47,7 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
   String? selectedStatus;
   String? imageUrl;
   File? _imageFile;
-  Uint8List? _imageBytes;
+  List<Uint8List> _imageBytesList = [];
   bool _isMapExpanded = true;
   double? latitude;
   double? longitude;
@@ -117,15 +118,17 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
   Future<void> _pickImage() async {
     try {
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      setState(() {
-        try { _imageFile = File(pickedFile.path); } catch(e) {}
-        _imageBytes = bytes;
+      final List<XFile> pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles.isNotEmpty) {
+        List<Uint8List> bytesList = [];
+        for (var file in pickedFiles) {
+          bytesList.add(await file.readAsBytes());
+        }
+        setState(() {
+          _imageBytesList.addAll(bytesList);
           imageUrl = null; // Reset URL jika file baru dipilih
         });
-    }
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to pick image: $e')),
@@ -133,14 +136,12 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
     }
   }
 
-  Future<String?> _uploadImage(String name, String category) async {
-    if (_imageBytes == null) return imageUrl;
-
-    final sanitizedFileName = '${name}_${category}_${DateTime.now().millisecondsSinceEpoch}'.replaceAll(' ', '_');
-    final path = 'uploads/$sanitizedFileName';
+  Future<String?> _uploadImage(String name, String category, Uint8List bytes, int index) async {
+    final sanitizedFileName = '${name}_${category}_${DateTime.now().millisecondsSinceEpoch}_$index'.replaceAll(' ', '_');
+    final path = 'uploads/$sanitizedFileName.jpg';
 
     try {
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, bytes, fileOptions: const FileOptions(contentType: 'image/jpeg'));
 
       if (uploadPath.isNotEmpty) {
         final publicUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
@@ -169,19 +170,22 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
     final name = nameNotifier.value;
     final category = selectedCategory ?? 'Uncategorized';
 
-    // Upload image jika ada file baru
-    final finalImageUrl = await _uploadImage(name, category);
-
-    if (finalImageUrl == null) return; // Hentikan proses jika upload gagal
+    String finalImageUrl = imageUrl ?? '';
+    if (_imageBytesList.isNotEmpty) {
+      String? newMainImage = await _uploadImage(name, category, _imageBytesList.first, 0);
+      if (newMainImage != null) {
+        finalImageUrl = newMainImage;
+      } else return;
+    }
 
     // Menggunakan copyWith untuk membuat objek baru
     DestinationModel updatedDestination = widget.destinationModel.copyWith(
-      name: nameNotifier.value.toLowerCase(),
-      location: locationNotifier.value.toLowerCase(),
+      name: nameNotifier.value,
+      location: locationNotifier.value,
       latitude: selectedLocation!.latitude,
       longitude: selectedLocation!.longitude,
       imageUrl: finalImageUrl,
-      organizer: organizerNotifier.value.toLowerCase(),
+      organizer: organizerNotifier.value,
       category: selectedCategory!,
       subcategory: selectedSubcategory!,
       description: descriptionNotifier.value,
@@ -196,6 +200,25 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
 
     try {
       await _destinationController.updateDestination(updatedDestination, finalImageUrl);
+      if (_imageBytesList.length > 1) {
+        for (int i = 1; i < _imageBytesList.length; i++) {
+          String? additionalUrl = await _uploadImage(name, category, _imageBytesList[i], i);
+          if (additionalUrl != null) {
+            final galleryId = FirebaseFirestore.instance.collection('galleries').doc().id;
+            final galleryModel = GalleryModel(
+              galleryId: galleryId,
+              name: name,
+              imageUrl: additionalUrl,
+              category: category,
+              subcategory: selectedSubcategory ?? '',
+              description: descriptionNotifier.value,
+              createdAt: Timestamp.now(),
+              mainImage: false,
+            );
+            await FirebaseFirestore.instance.collection('galleries').doc(galleryId).set(galleryModel.toMap());
+          }
+        }
+      }
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Destination updated successfully'),
@@ -226,11 +249,10 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                     return TextForm(
                       controller: _nameController,
                       label: 'Destination Name',
-                      // onChanged: (value) => nameNotifier.value = value,
                       onChanged: (value) {
                         nameNotifier.value = value;
                         _nameController.value = TextEditingValue(
-                          text: value.toLowerCase(),
+                          text: value,
                           selection: _nameController.selection,
                         );
                       },
@@ -246,11 +268,10 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                     return TextForm(
                       controller: _locationController,
                       label: 'Destination Location',
-                      // onChanged: (value) => locationNotifier.value = value,
                       onChanged: (value) {
                         locationNotifier.value = value;
                         _locationController.value = TextEditingValue(
-                          text: value.toLowerCase(),
+                          text: value,
                           selection: _locationController.selection,
                         );
                       },
@@ -260,7 +281,6 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                 ),
                 SizedBox(height: 20),
 
-                // map
                 MainCard(
                   child: Stack(
                     children: [
@@ -279,7 +299,6 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                             child: FlutterMap(
                               mapController: _mapController,
                               options: MapOptions(
-                                // initialCenter: LatLng(1.054507, 104.004120),
                                 initialCenter: LatLng(latitude!, longitude!),
                                 onTap: (_, point) {
                                   setState(() {
@@ -289,7 +308,7 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                               ),
                               children: [
                                 TileLayer(
-                                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgentPackageName: 'com.example.guideme', // Updated URL without subdomains
+                                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgentPackageName: 'com.example.guideme',
                                 ),
                                 if (selectedLocation != null)
                                   MarkerLayer(
@@ -333,11 +352,10 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                     return TextForm(
                       controller: _organizerController,
                       label: 'Destination Organizer',
-                      // onChanged: (value) => organizerNotifier.value = value,
                       onChanged: (value) {
                         organizerNotifier.value = value;
                         _organizerController.value = TextEditingValue(
-                          text: value.toLowerCase(),
+                          text: value,
                           selection: _organizerController.selection,
                         );
                       },
@@ -347,7 +365,6 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                 ),
                 SizedBox(height: 20),
 
-                // Dropdown untuk memilih kategori
                 StreamBuilder<List<String>>(
                   stream: _categoryController.getCategories(),
                   builder: (context, snapshot) {
@@ -356,12 +373,12 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                     }
                     return TextDropdown(
                       label: 'Category',
-                      items: ['destination'], // Hanya memiliki satu item tetap
-                      value: selectedCategory, // Menampilkan nilai _selectedCategory
-                      enabled: false, // Dropdown dapat dipilih (diubah)
+                      items: ['destination'],
+                      value: selectedCategory,
+                      enabled: false,
                       onChanged: (value) {
                         setState(() {
-                          selectedCategory = value ?? 'destination'; // Memperbarui _selectedCategory ketika ada perubahan
+                          selectedCategory = value ?? 'destination';
                         });
                       },
                       validator: (value) {
@@ -370,27 +387,11 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                         }
                         return null;
                       },
-                      // label: 'Category',
-                      // items: snapshot.data ?? [],
-                      // value: selectedCategory,
-                      // onChanged: (value) {
-                      //   setState(() {
-                      //     selectedCategory = value;
-                      //     selectedSubcategory = null; // Reset subkategori
-                      //   });
-                      // },
-                      // validator: (value) {
-                      //   if (value == null || value.isEmpty) {
-                      //     return 'Please select a category';
-                      //   }
-                      //   return null;
-                      // },
                     );
                   },
                 ),
                 SizedBox(height: 16),
 
-                // Dropdown untuk memilih subkategori
                 StreamBuilder<List<String>>(
                   stream: selectedCategory != null ? _categoryController.getSubcategories(selectedCategory!) : Stream.value([]),
                   builder: (context, snapshot) {
@@ -481,46 +482,35 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
                 ),
                 SizedBox(height: 20),
 
-                NewUploadImageWithPreview(
-                  imageUrl: imageUrl, // Gantilah dengan URL gambar yang dipilih
-                  imageFile: _imageFile,
-                  imageBytes: _imageBytes,
-                  onPressed: _pickImage, // Fungsi untuk memilih gambar
+                MultiUploadImageWithPreview(
+                  imageBytesList: _imageBytesList,
+                  imageUrl: imageUrl,
+                  onPressed: _pickImage,
                 ),
 
-                // Waktu Buka
                 DateTimePicker(
                   title: 'Opening Date Time',
-                  subtitle: openingTimeNotifier.value != null ? (openingTimeNotifier.value).toDate().toString() : 'Select closing date time',
-                  selectedTime: openingTimeNotifier.value, // Menggunakan Timestamp sebagai default
+                  subtitle: openingTimeNotifier.value != null ? (openingTimeNotifier.value).toDate().toString() : 'Select opening date time',
+                  selectedTime: openingTimeNotifier.value,
                   onDateTimeSelected: (selectedTime) {
                     setState(() {
-                      openingTimeNotifier.value = selectedTime; // Mengupdate openingTimeNotifier
+                      openingTimeNotifier.value = selectedTime;
                     });
                   },
                 ),
                 SizedBox(height: 20),
 
-                // Waktu Tutup
                 DateTimePicker(
                   title: 'Closing Date Time',
                   subtitle: closingTimeNotifier.value != null ? (closingTimeNotifier.value).toDate().toString() : 'Select closing date time',
-                  selectedTime: closingTimeNotifier.value, // Menggunakan Timestamp sebagai default
+                  selectedTime: closingTimeNotifier.value,
                   onDateTimeSelected: (selectedTime) {
                     setState(() {
-                      closingTimeNotifier.value = selectedTime; // Mengupdate closingTimeNotifier
+                      closingTimeNotifier.value = selectedTime;
                     });
                   },
                 ),
                 SizedBox(height: 60),
-
-                // Align(
-                //   alignment: Alignment.bottomRight,
-                //   child: MediumButton(
-                //     onPressed: _saveChanges,
-                //     label: 'Save',
-                //   ),
-                // ),
               ],
             ),
           ),
@@ -533,39 +523,6 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
       bottomNavigationBar: AdminBottomNavBar(selectedIndex: 1),
     );
   }
-}
-
-
-
-
-
-
-
-
-
-
-  // Future<void> _pickImage() async {
-  //   String? imagePath = await _galleryController.pickImage();
-  //   if (imagePath != null) {
-  //     setState(() {
-  //       imageUrl = imagePath;
-  //     });
-  //   }
-  // }
-
-
-
-      // try {
-    //   // Memanggil fungsi untuk menyimpan perubahan
-    //   await _destinationController.updateDestination(updatedDestination, 'localImagePath');
-
-    //       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    //         content: Text('Destination updated successfully'),
-    //       ));
-    //       Navigator.pop(context);
-    //     } catch (e) {
-    //       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    //         content: Text('Failed to update destination: $e'),
     //       ));
     //     }
     //   } else {
@@ -592,3 +549,5 @@ class _ModifyDestinationScreenState extends State<ModifyDestinationScreen> {
     //   imageUrl: finalImageUrl,
     //   description: _descriptionController.text.trim(),
     // );
+}
+

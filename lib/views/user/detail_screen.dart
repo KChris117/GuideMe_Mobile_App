@@ -155,12 +155,16 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _loadImages() async {
-    imageName = name.toLowerCase();
+    imageName = widget.data.name.toString();
     final querySnapshot = await FirebaseFirestore.instance.collection('galleries').where('name', isEqualTo: imageName).get();
 
     List<String> loadedImages = [];
     for (var doc in querySnapshot.docs) {
       loadedImages.add(doc['imageUrl']);
+    }
+
+    if (loadedImages.isEmpty) {
+      loadedImages.add(imageUrl);
     }
 
     setState(() {
@@ -263,7 +267,7 @@ class _DetailScreenState extends State<DetailScreen> {
       ReviewModel dataReview = ReviewModel(
         uid: uid, // Replace with actual uid
         username: username, // Replace with actual customer name
-        name: name.toLowerCase(),
+        name: name,
         review: review,
         // category: 'category', // Replace with actual category
         // subcategory: 'subcategory', // Replace with actual subcategory
@@ -309,7 +313,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _updateAverageRating() async {
     try {
-      final reviewsSnapshot = await FirebaseFirestore.instance.collection('reviews').where('name', isEqualTo: name.toLowerCase()).get();
+      final reviewsSnapshot = await FirebaseFirestore.instance.collection('reviews').where('name', isEqualTo: name).get();
 
       if (reviewsSnapshot.docs.isNotEmpty) {
         double totalRating = 0;
@@ -661,7 +665,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
                                       final existingReview = await FirebaseFirestore.instance
                                           .collection('reviews')
-                                          .where('name', isEqualTo: name.toLowerCase())
+                                          .where('name', isEqualTo: name)
                                           .where('uid', isEqualTo: uid)
                                           .get();
 
@@ -700,7 +704,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       ],
                     ),
                     FutureBuilder<QuerySnapshot>(
-                      future: FirebaseFirestore.instance.collection('reviews').where('name', isEqualTo: name.toLowerCase()).orderBy('createdAt', descending: true).get(),
+                      future: FirebaseFirestore.instance.collection('reviews').where('name', isEqualTo: name).orderBy('createdAt', descending: true).get(),
                       builder: (context, snapshot) {
                         // if (snapshot.connectionState == ConnectionState.waiting) {
                         //   return Center(child: CircularProgressIndicator());
@@ -910,7 +914,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                       onPressed: () async {
                                         final snapshot = await FirebaseFirestore.instance
                                             .collection('reviews')
-                                            .where('name', isEqualTo: name.toLowerCase())
+                                            .where('name', isEqualTo: name)
                                             // .where('uid', isNotEqualTo: uid)
                                             .orderBy('createdAt', descending: true)
                                             .get();

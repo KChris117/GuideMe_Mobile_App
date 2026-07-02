@@ -179,28 +179,23 @@ class Dynamic_CarouselWidgetState extends State<DynamicCarouselWidget> {
         // ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(3, (index) {
-            // Membatasi indikator menjadi 3
-            // Menggunakan modulus untuk mengulang indikator jika gambar lebih banyak
-            int actualIndex = _currentIndex % widget.imageAssets.length;
-
+          children: widget.imageAssets.asMap().entries.map((entry) {
             return GestureDetector(
               onTap: () {
                 setState(() {
-                  // Menentukan indeks gambar yang dipilih berdasarkan indikator yang diklik
-                  _currentIndex = index + actualIndex;
+                  _currentIndex = entry.key;
                 });
               },
               child: Container(
-                width: actualIndex == index ? 30.0 : 20.0,
+                width: _currentIndex == entry.key ? 30.0 : 20.0,
                 height: 5.0,
                 margin: EdgeInsets.symmetric(horizontal: 5.0),
                 decoration: BoxDecoration(
-                  color: actualIndex == index ? AppColors.primaryColor : AppColors.tertiaryColor,
+                  color: _currentIndex == entry.key ? AppColors.primaryColor : AppColors.tertiaryColor,
                 ),
               ),
             );
-          }),
+          }).toList(),
         ),
       ],
     );

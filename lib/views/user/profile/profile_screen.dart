@@ -100,12 +100,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     builder: (context, authProvider, child) {
                       if (authProvider.isLoggedIn) {
                         return GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             // Navigasi ke ProfileDetailScreen
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(builder: (context) => DetailProfileScreen()),
                             );
+                            await authProvider.fetchCurrentUser();
                           },
                           child: Container(
                             // Membungkus Row dengan Container

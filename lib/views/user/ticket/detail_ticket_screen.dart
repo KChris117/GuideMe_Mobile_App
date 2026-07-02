@@ -84,7 +84,7 @@ class _DetailTicketScreenState extends State<DetailTicketScreen> {
   }
 
   Future<void> _loadImages() async {
-    imageName = name.toLowerCase();
+    imageName = name;
     final querySnapshot = await FirebaseFirestore.instance.collection('galleries').where('name', isEqualTo: imageName).get();
 
     List<String> loadedImages = [];
@@ -339,7 +339,7 @@ class _DetailTicketScreenState extends State<DetailTicketScreen> {
                         onTap: () async {
                           var model;
                           var newCollectionName = '${widget.category}s';
-                          var ticketName = name.toLowerCase(); // Pastikan ticketName fdalam format yang sesuai
+                          var ticketName = name; // Pastikan ticketName fdalam format yang sesuai
 
                           QuerySnapshot querySnapshot;
 

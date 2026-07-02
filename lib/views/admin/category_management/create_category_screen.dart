@@ -116,7 +116,7 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> with Single
   }
 
   void _submitCategory() async {
-    String name = _categoryNameController.text.trim().toLowerCase();
+    String name = _categoryNameController.text.trim();
     // Memeriksa apakah form valid
     if (_formKey.currentState!.validate()) {
       try {
@@ -138,7 +138,7 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> with Single
   }
 
   void _submitSubcategory() async {
-    String subcategoryName = _subCategoryNameController.text.trim().toLowerCase();
+    String subcategoryName = _subCategoryNameController.text.trim();
 
     if (_formKey.currentState!.validate()) {
       try {
@@ -205,7 +205,7 @@ class _CreateCategoryScreenState extends State<CreateCategoryScreen> with Single
                     validator: (value) => value == null || value.isEmpty ? 'Category is required' : null,
                     onChanged: (value) {
                       _categoryNameController.value = TextEditingValue(
-                        text: value.toLowerCase(),
+                        text: value,
                         selection: _categoryNameController.selection,
                       );
                     },

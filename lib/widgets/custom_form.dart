@@ -669,3 +669,56 @@ class NewUploadImageWithPreview extends StatelessWidget {
     );
   }
 }
+class MultiUploadImageWithPreview extends StatelessWidget {
+  final List<Uint8List>? imageBytesList;
+  final String? imageUrl; // Existing main image (if editing)
+  final VoidCallback onPressed;
+
+  const MultiUploadImageWithPreview({
+    super.key,
+    this.imageBytesList,
+    required this.onPressed,
+    this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        NewUploadImageButton(
+          onPressed: onPressed,
+          label: 'Pick images',
+        ),
+        SizedBox(height: 8),
+        if (imageBytesList != null && imageBytesList!.isNotEmpty)
+          SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: imageBytesList!.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: Image.memory(imageBytesList![index], fit: BoxFit.cover, width: 200, height: 200),
+                  ),
+                );
+              },
+            ),
+          )
+        else if (imageUrl != null && imageUrl!.isNotEmpty)
+          GestureDetector(
+            onTap: onPressed,
+            child: MainCard(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: Image.network(imageUrl!, fit: BoxFit.fitWidth, height: 200, width: double.infinity),
+              ),
+            ),
+          )
+      ],
+    );
+  }
+}

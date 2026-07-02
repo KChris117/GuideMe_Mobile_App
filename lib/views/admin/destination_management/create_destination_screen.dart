@@ -1,9 +1,11 @@
+import 'package:guideme/models/gallery_model.dart';
 // import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import 'package:guideme/controllers/category_controller.dart';
 import 'package:guideme/controllers/destination_controller.dart';
@@ -50,7 +52,8 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
   String? selectedStatus;
 
   File? _imageFile;
-  Uint8List? _imageBytes;
+  List<Uint8List> _imageBytesList = [];
+  bool _isLoading = false;
 
   // mereset map setiap membuat halaman
   @override
@@ -69,80 +72,57 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
   //   }
   // }
 
-  // Fungsi untuk memilih gambar
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
+    final List<XFile> pickedFiles = await picker.pickMultiImage();
+    if (pickedFiles.isNotEmpty) {
+      List<Uint8List> bytesList = [];
+      for (var file in pickedFiles) {
+        bytesList.add(await file.readAsBytes());
+      }
       setState(() {
-        try { _imageFile = File(pickedFile.path); } catch(e) {}
-        _imageBytes = bytes; // Menyimpan file gambar yang dipilih
+        _imageBytesList.addAll(bytesList);
       });
     }
   }
 
-  // Fungsi untuk mengunggah gambar ke Supabase
-  Future uploadImage() async {
-    if (_imageBytes == null) return;
-
-    // Ambil teks dari field 'name' dan buat format nama file
+  Future<String?> uploadImage(Uint8List bytes, int index) async {
     final name = _nameController.text;
     final category = _selectedCategory ?? 'uncategorized';
-
-    final fileName = '${name}_${category}_${DateTime.now().millisecondsSinceEpoch}';
-    final path = 'uploads/$fileName';
-
+    final sanitizedFileName = '${name}_${category}_${DateTime.now().millisecondsSinceEpoch}_$index'.replaceAll(' ', '_');
+    final path = 'uploads/$sanitizedFileName.jpg';
     try {
-      // Mengunggah gambar ke Supabase
-      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, _imageBytes!, fileOptions: const FileOptions(contentType: 'image/jpeg'));
-
+      final uploadPath = await Supabase.instance.client.storage.from('images').uploadBinary(path, bytes, fileOptions: const FileOptions(contentType: 'image/jpeg'));
       if (uploadPath.isNotEmpty) {
-        // Mendapatkan URL publik untuk gambar yang diunggah
-        final publicUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
-
-        if (publicUrl.isNotEmpty) {
-          setState(() {
-            _imageUrl = publicUrl; // Simpan URL publik ke variabel
-          });
-
-          // Simpan data galeri setelah berhasil mengunggah
-          saveDestination();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to retrieve public URL for the image.')),
-          );
-        }
-      } else {
-        throw Exception('Upload failed: No valid upload path returned.');
+        return Supabase.instance.client.storage.from('images').getPublicUrl(path);
       }
     } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to upload image: $error')),
-      );
+      print('Upload error: $error');
     }
+    return null;
   }
 
   Future<void> saveDestination() async {
     if (_formKey.currentState!.validate()) {
-      // Validasi form
-      if (_imageUrl.isNotEmpty && _openingTime != null && _closingTime != null && _selectedLocation != null && _selectedCategory != null && selectedStatus != null) {
-        // Lanjutkan dengan menyimpan event
-        // File imageFile = File(_imageUrl);
-        // String localImagePath = await _galleryController.saveImageLocally(imageFile);
+      if (_imageBytesList.isNotEmpty && _openingTime != null && _closingTime != null && _selectedLocation != null && _selectedCategory != null && selectedStatus != null) {
+        setState(() { _isLoading = true; });
+        String? mainImageUrl = await uploadImage(_imageBytesList.first, 0);
+        if (mainImageUrl == null) {
+           setState(() { _isLoading = false; });
+           return;
+        }
+        
         double _rating = double.tryParse(_ratingController.text) ?? 0.0;
-
         DestinationModel dataDestination = DestinationModel(
           destinationId: '',
-          name: _nameController.text.toLowerCase(),
-          location: _locationController.text.toLowerCase(),
+          name: _nameController.text,
+          location: _locationController.text,
           latitude: _selectedLocation!.latitude,
           longitude: _selectedLocation!.longitude,
-          imageUrl: _imageUrl,
-          organizer: _organizerController.text.toLowerCase(),
+          imageUrl: mainImageUrl,
+          organizer: _organizerController.text,
           category: _selectedCategory!,
-          subcategory: _selectedSubcategory!,
+          subcategory: _selectedSubcategory ?? '',
           description: _descriptionController.text,
           information: _informationController.text,
           rating: _rating,
@@ -154,29 +134,36 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
         );
 
         try {
-          // Memanggil fungsi addDestination untuk menyimpan event dan galeri ke Firestore
-          await _destinationController.addDestination(dataDestination, _imageUrl);
-
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Destination created successfully'),
-          ));
+          await _destinationController.addDestination(dataDestination, mainImageUrl);
+          if (_imageBytesList.length > 1) {
+            for (int i = 1; i < _imageBytesList.length; i++) {
+              String? additionalUrl = await uploadImage(_imageBytesList[i], i);
+              if (additionalUrl != null) {
+                final galleryId = FirebaseFirestore.instance.collection('galleries').doc().id;
+                final galleryModel = GalleryModel(
+                  galleryId: galleryId,
+                  name: _nameController.text,
+                  imageUrl: additionalUrl,
+                  category: _selectedCategory!,
+                  subcategory: _selectedSubcategory ?? '',
+                  description: _descriptionController.text,
+                  createdAt: Timestamp.now(),
+                  mainImage: false,
+                );
+                await FirebaseFirestore.instance.collection('galleries').doc(galleryId).set(galleryModel.toMap());
+              }
+            }
+          }
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Destination created!'), backgroundColor: Colors.green));
           Navigator.pop(context);
         } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Failed to create destination: $e'),
-          ));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: '), backgroundColor: Colors.red));
+        } finally {
+          setState(() { _isLoading = false; });
         }
       } else {
-        print(_imageFile);
-        print(_imageUrl);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Please complete all fields and upload an image'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please fill all fields and upload images'), backgroundColor: Colors.red));
       }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Please complete all fields correctly'),
-      ));
     }
   }
 
@@ -202,7 +189,7 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
                   validator: (value) => value == null || value.isEmpty ? 'Name is required' : null,
                   onChanged: (value) {
                     _nameController.value = TextEditingValue(
-                      text: value.toLowerCase(),
+                      text: value,
                       selection: _nameController.selection,
                     );
                   },
@@ -216,7 +203,7 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
                   validator: (value) => value == null || value.isEmpty ? 'Location is required' : null,
                   onChanged: (value) {
                     _locationController.value = TextEditingValue(
-                      text: value.toLowerCase(),
+                      text: value,
                       selection: _locationController.selection,
                     );
                   },
@@ -298,7 +285,7 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
                   },
                   onChanged: (value) {
                     _organizerController.value = TextEditingValue(
-                      text: value.toLowerCase(),
+                      text: value,
                       selection: _organizerController.selection,
                     );
                   },
@@ -424,11 +411,9 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
                 ),
                 SizedBox(height: 16),
 
-                NewUploadImageWithPreview(
-                  imageFile: _imageFile,
-                  imageBytes: _imageBytes,
-                  imageUrl: _imageUrl, // Gantilah dengan URL gambar yang dipilih
-                  onPressed: _pickImage, // Fungsi untuk memilih gambar
+                MultiUploadImageWithPreview(
+                  imageBytesList: _imageBytesList,
+                  onPressed: _pickImage,
                 ),
 
                 // Waktu Buka
@@ -498,7 +483,7 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
                 // Align(
                 //   alignment: Alignment.bottomRight,
                 //   child: MediumButton(
-                //     onPressed: uploadImage, // Memanggil fungsi saveDestination ketika tombol ditekan
+                //     onPressed: saveDestination, // Memanggil fungsi saveDestination ketika tombol ditekan
                 //     label: 'Save',
                 //   ),
                 // ),
@@ -509,7 +494,7 @@ class _createDestinationScreenState extends State<CreateDestinationScreen> {
         ),
       ),
       floatingActionButton: MediumButton(
-        onPressed: uploadImage,
+        onPressed: saveDestination,
         label: 'Save Destination',
       ),
       bottomNavigationBar: AdminBottomNavBar(selectedIndex: 0),
