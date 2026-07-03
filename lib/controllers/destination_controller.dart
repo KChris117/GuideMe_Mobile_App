@@ -91,32 +91,30 @@ class DestinationController {
       }
 
       try {
+        // Ambil nama sebelumnya untuk mengupdate referensi yang lama
+        String previousName = destinationSnapshot.data()?['name'] ?? destination.name;
+
         // Update destination di Firestore
         await _firestore.collection('destinations').doc(destination.destinationId).update({
           ...destination.toMap(),
           if (newRating != null) 'rating': newRating,
         });
 
-        // Jika rating baru tidak null, perbarui juga koleksi tickets
-        if (newRating != null) {
-          var ticketDocs = await _firestore.collection('tickets').where('name', isEqualTo: destination.name).get();
-
-          for (var doc in ticketDocs.docs) {
-            await _firestore.collection('tickets').doc(doc.id).update({
-              'rating': newRating,
-              'updatedAt': Timestamp.now(),
-            });
-          }
+        // Perbarui nama di koleksi tickets jika namanya berubah (atau ratingnya berubah)
+        var ticketDocs = await _firestore.collection('tickets').where('name', isEqualTo: previousName).get();
+        for (var doc in ticketDocs.docs) {
+          await _firestore.collection('tickets').doc(doc.id).update({
+            'name': destination.name,
+            if (newRating != null) 'rating': newRating,
+            'updatedAt': Timestamp.now(),
+          });
         }
 
-        // await _firestore.collection('destinations').doc(destination.destinationId).update(destination.toMap());
-
-        // Query semua galeri terkait destination
+        // Query semua galeri terkait destination menggunakan nama sebelumnya
         var galleryDocs = await _firestore
             .collection('galleries')
-            .where('name', isEqualTo: destination.name) // Kondisi pertama
-            .where('mainImage', isEqualTo: true) // Kondisi kedua
-            .get();
+            .where('name', isEqualTo: previousName) // Kondisi pertama menggunakan previousName
+            .get(); // Hapus batasan mainImage agar SEMUA galeri ikut terupdate namanya
 
         // Perbarui setiap dokumen galeri yang ditemukan
         for (var doc in galleryDocs.docs) {
@@ -125,7 +123,7 @@ class DestinationController {
             'category': destination.category,
             'subcategory': destination.subcategory,
             'description': destination.description,
-            'imageUrl': finalImageUrl, // Jika gambar galeri juga diperbarui
+            if (doc.data()['mainImage'] == true) 'imageUrl': finalImageUrl, // Hanya update gambar jika itu mainImage
             'updatedAt': Timestamp.now(), // Tambahkan timestamp pembaruan
           });
         }
