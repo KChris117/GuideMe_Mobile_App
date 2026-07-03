@@ -20,12 +20,6 @@
 - **Frontend**: Flutter (Dart)
 - **Backend as a Service (BaaS)**: Firebase (Auth & Firestore)
 - **Payment Gateway**: Midtrans (Snap API)
-- **State Management**: Provider
-
-## 📸 Screenshots
-
-*(You can add screenshots of your app here later by uploading them to an `assets/images` folder in your repo)*
-- `Home Screen` | `Detail Screen` | `Payment Screen` | `History Screen`
 
 ## 🚀 Getting Started
 
