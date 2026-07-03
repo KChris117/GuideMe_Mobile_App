@@ -74,4 +74,4 @@ This project was built collaboratively by an amazing team:
   *Team Member | Documentation Contributor*
 
 ---
-*Developed with ❤️ by the GuideME Team.*
+*Developed by the GuideME Team (PBL-IF-12).*
