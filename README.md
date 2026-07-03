@@ -58,5 +58,20 @@ Follow these instructions to run the project on your local machine for developme
 ## ⚠️ Important Note (Sandbox Mode)
 This application is currently running in **Sandbox Mode** for testing purposes. **DO NOT** use real money or actual credit cards to make transactions in this app. Please use the dummy credentials provided by the [Midtrans Simulator](https://simulator.sandbox.midtrans.com/).
 
+## 👥 Team & Contributors
+
+This project was built collaboratively by an amazing team:
+
+- **Firmansyah Pramudia Ariyanto**
+  *Team Leader | Full Stack Developer | UI/UX Designer | Documentation Manager*
+- **Christoffel Aristo Marbun**
+  *Team Member | Full Stack Developer | UI/UX Designer | Documentation Contributor*
+- **Rachel Hartati Simbolon**
+  *Team Member | UI/UX Designer | Documentation Manager*
+- **Isma Rapmaria Silitonga**
+  *Team Member | UI/UX Designer | Documentation Contributor*
+- **Asyri Dwi Yanti Ningsih**
+  *Team Member | Documentation Contributor*
+
 ---
-Developed by **Christoffel Aristo Marbun**.
+*Developed with ❤️ by the GuideME Team.*
