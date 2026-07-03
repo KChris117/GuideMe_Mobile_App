@@ -28,6 +28,7 @@ class MidtransService {
           },
           'enabled_payments': [
             'qris',
+            'other_qris',
             'gopay',
             'shopeepay',
             'credit_card',

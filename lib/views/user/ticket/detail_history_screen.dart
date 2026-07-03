@@ -287,8 +287,18 @@ class _DetailHistoryScreenState extends State<DetailHistoryScreen> {
                             Row(
                               children: [
                                 Text(
-                                  'Purchase completed',
-                                  style: AppTextStyles.bodyBold,
+                                  currentPaymentStatus == 'pending'
+                                      ? 'Purchase Pending'
+                                      : (currentPaymentStatus == 'expire' || currentPaymentStatus == 'cancel' || currentPaymentStatus == 'deny')
+                                          ? 'Purchase Failed / Expired'
+                                          : 'Purchase Completed',
+                                  style: AppTextStyles.bodyBold.copyWith(
+                                    color: currentPaymentStatus == 'pending'
+                                        ? AppColors.yellowColor
+                                        : (currentPaymentStatus == 'expire' || currentPaymentStatus == 'cancel' || currentPaymentStatus == 'deny')
+                                            ? Colors.red
+                                            : AppColors.greenColor,
+                                  ),
                                 )
                               ],
                             ),
@@ -559,7 +569,7 @@ class _DetailHistoryScreenState extends State<DetailHistoryScreen> {
                                         children: [Text('Payment method:')],
                                       ),
                                       Column(
-                                        children: [Text('Credit Card')],
+                                        children: [Text('Midtrans (Online)')],
                                       ),
                                     ],
                                   ),
@@ -623,7 +633,7 @@ class _DetailHistoryScreenState extends State<DetailHistoryScreen> {
                             onPressed: () async {
                               final Uri url = Uri.parse(widget.data.paymentUrl!);
                               if (await canLaunchUrl(url)) {
-                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                                await launchUrl(url, mode: LaunchMode.inAppBrowserView);
                                 
                                 // Setelah ditutup, perbarui status ke Midtrans (hanya jika orderId ada)
                                 if (widget.data.orderId != null && widget.data.historyId != null) {

@@ -206,11 +206,17 @@ class HistoryScreenContent extends StatelessWidget {
                                       Row(
                                         children: [
                                           Text(
-                                            newHistoryModel.paymentStatus == 'pending' ? 'Pending Payment' : 'Completed',
+                                            newHistoryModel.paymentStatus == 'pending'
+                                                ? 'Pending Payment'
+                                                : (newHistoryModel.paymentStatus == 'expire' || newHistoryModel.paymentStatus == 'cancel' || newHistoryModel.paymentStatus == 'deny')
+                                                    ? 'Expired / Canceled'
+                                                    : 'Completed',
                                             style: AppTextStyles.mediumBold.copyWith(
                                                 color: newHistoryModel.paymentStatus == 'pending'
                                                     ? AppColors.yellowColor
-                                                    : AppColors.greenColor),
+                                                    : (newHistoryModel.paymentStatus == 'expire' || newHistoryModel.paymentStatus == 'cancel' || newHistoryModel.paymentStatus == 'deny')
+                                                        ? Colors.red
+                                                        : AppColors.greenColor),
                                           ),
                                         ],
                                       ),

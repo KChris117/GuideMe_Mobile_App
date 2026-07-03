@@ -88,7 +88,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         // 3. Buka WebView untuk pembayaran
         final Uri url = Uri.parse(redirectUrl);
         if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
+          await launchUrl(url, mode: LaunchMode.inAppBrowserView);
           
           // 4. Setelah WebView ditutup, cek status ke Midtrans
           String status = await _midtransService.checkTransactionStatus(orderId);
@@ -869,6 +869,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               )
                             ],
                           ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: 16,
+                      ),
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          border: Border.all(color: Colors.red),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'WARNING: DUMMY PAYMENT ONLY!\nDO NOT use your real money or real credit card to pay. This is a Sandbox testing mode.',
+                                style: AppTextStyles.smallBold.copyWith(color: Colors.red),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       SizedBox(
